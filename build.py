@@ -42,6 +42,7 @@ def font_face(subsets=("latin", "latin-ext")):
 
 FONT = font_face()
 FONT_LATIN = font_face(("latin",))
+MONO = "@font-face { font-family: M; src: url(data:font/woff2;base64," + base64.b64encode((ROOT / "fonts" / "mono.woff2").read_bytes()).decode() + ") format('woff2'); }"
 
 BASE_CSS = """
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -119,24 +120,111 @@ def plot(days):
             months.append(f'<span class="m" style="left:{i / len(days) * 100:.2f}%">{date.strftime("%b")}</span>')
     return svg, "".join(months)
 
-def motif():
-    """Abstract design-system specimen: neutral ramp, spacing scale, type scale."""
-    steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
-    ops = [.04, .08, .14, .24, .36, .5, .64, .78, .9, 1]
-    sw = "".join(f'<div class="{"h" if i % 2 else ""}"><i style="opacity:{o}"></i><span class="m">{n}</span></div>'
-                 for i, (n, o) in enumerate(zip(steps, ops)))
-    sp = "".join(f'<div class="{"h" if v > 24 else ""}"><b style="width:{v}px;height:{v}px"></b><span class="m">{v}</span></div>' for v in (4, 8, 12, 16, 24, 32))
-    ty = "".join(f'<span class="{"h" if i > 3 else ""}" style="font-size:{z}px;line-height:1">Aa</span>' for i, z in enumerate((11, 14, 18, 24, 32)))
-    return (f'<div class="ds">'
-            f'<div class="f" style="--d:.55s"><div class="lb m" style="margin-bottom:8px"><span>color.neutral</span><span>01</span></div><div class="sw">{sw}</div></div>'
-            f'<div class="f" style="--d:.65s"><div class="lb m" style="margin-bottom:8px"><span>space</span><span>02</span></div><div class="sp">{sp}</div></div>'
-            f'<div class="f" style="--d:.75s"><div class="lb m" style="margin-bottom:8px"><span>type</span><span>03</span></div><div class="ty">{ty}</div></div>'
-            f'</div>')
+def torus_frames(n=40, cols=52, rows=26):
+    """ASCII frames of a slowly rotating torus (pure math, no dependencies)."""
+    ramp = ".,-~:;=!*#$@"
+    frames = []
+    for f in range(n):
+        A = 0.6 + f * 2 * math.pi / n          # spin around one axis...
+        B = 0.3 + f * 2 * math.pi / n          # ...and one turn around the other: loops seamlessly
+        out = [" "] * (cols * rows)
+        zbuf = [0.0] * (cols * rows)
+        cA, sA, cB, sB = math.cos(A), math.sin(A), math.cos(B), math.sin(B)
+        for j in range(0, 628, 5):
+            ct, st = math.cos(j / 100), math.sin(j / 100)
+            for i in range(0, 628, 2):
+                sp, cp = math.sin(i / 100), math.cos(i / 100)
+                h = ct + 2
+                D = 1 / (sp * h * sA + st * cA + 5)
+                t = sp * h * cA - st * sA
+                x = int(cols / 2 + cols * 0.52 * D * (cp * h * cB - t * sB))
+                y = int(rows / 2 + 0.5 + rows * 0.62 * D * (cp * h * sB + t * cB))
+                N = int(8 * ((st * sA - sp * ct * cA) * cB - sp * ct * sA - st * cA - cp * ct * sB))
+                k = x + cols * y
+                if 0 <= y < rows and 0 <= x < cols and D > zbuf[k]:
+                    zbuf[k] = D
+                    out[k] = ramp[max(N, 0)]
+        frames.append("\n".join("".join(out[r * cols:(r + 1) * cols]) for r in range(rows)))
+    return frames
+
+def orb_frames(n=24, g=30):
+    """Dithered sphere with drifting clouds (monochrome pixel mosaic). Returns SVG path data per frame."""
+    bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
+    r = g / 2
+    lx, ly, lz = -0.5, -0.55, 0.67
+    on_frames, disc = [], []
+    for f in range(n):
+        t = 2 * math.pi * f / n
+        on = []
+        for y in range(g):
+            for x in range(g):
+                nx, ny = (x + .5 - r) / r, (y + .5 - r) / r
+                d2 = nx * nx + ny * ny
+                if d2 > 1:
+                    continue
+                nz = math.sqrt(1 - d2)
+                if f == 0:
+                    disc.append((x, y))
+                light = max(0, nx * lx + ny * ly + nz * lz)
+                # clouds: periodic in t so the loop is seamless; u drifts with the sphere's surface
+                u = math.atan2(nx, nz)
+                cloud = (math.sin(3 * u + ny * 4 + t) + math.sin(5 * u - ny * 6 + 2 * t + 1.3) * .6
+                         + math.sin(2 * ny * 5 + u + t + 2.1) * .5) / 2.1
+                v = 0.15 + 0.6 * light + 0.3 * cloud
+                if v > (bayer[y % 4][x % 4] + .5) / 16:
+                    on.append((x, y))
+        on_frames.append(on)
+    path = lambda cells: "".join(f"M{x * 4} {y * 4}h3v3h-3z" for x, y in cells)
+    return [path(c) for c in on_frames], path(disc), g * 4
+
+def motif_orb():
+    frames, disc, size = orb_frames()
+    svgs = "".join(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}"><path class="dk" d="{disc}"/><path class="lt" d="{fr}"/></svg>' for fr in frames)
+    return f'<div class="ds orb f" style="--d:.5s" aria-hidden="true"><div class="win"><div class="strip" style="--n:{len(frames)}">{svgs}</div></div></div>'
+
+def ascii_orb_frames(n=36, cols=52, rows=26):
+    """ASCII sphere lit from the top-left with drifting cloud bands (seamless loop)."""
+    ramp = " .:-=+*#%@"
+    cw, ch = 5.4, 9.0                      # character cell size in px (mono 9px)
+    R = rows * ch / 2 - 4                  # sphere radius in px
+    cx, cy = cols * cw / 2, rows * ch / 2
+    lx, ly, lz = -0.5, -0.55, 0.67
+    frames = []
+    for f in range(n):
+        t = 2 * math.pi * f / n
+        lines = []
+        for r in range(rows):
+            line = ""
+            for c in range(cols):
+                nx = ((c + .5) * cw - cx) / R
+                ny = ((r + .5) * ch - cy) / R
+                d2 = nx * nx + ny * ny
+                if d2 > 1:
+                    line += " "
+                    continue
+                nz = math.sqrt(1 - d2)
+                light = max(0, nx * lx + ny * ly + nz * lz)
+                u = math.atan2(nx, nz)
+                cloud = (math.sin(3 * u + ny * 4 + t) + .6 * math.sin(5 * u - ny * 6 + 2 * t + 1.3)
+                         + .5 * math.sin(10 * ny + u + t + 2.1)) / 2.1
+                v = 0.12 + 0.62 * light + 0.28 * cloud
+                v = min(max(v, 0), 0.999)
+                line += ramp[max(1, int(v * len(ramp)))]
+            lines.append(line.rstrip())
+        frames.append("\n".join(lines))
+    return frames
+
+def motif(kind="torus"):
+    frames = ascii_orb_frames() if kind == "asciiorb" else torus_frames()
+    pre = "".join(f"<pre>{html.escape(fr)}</pre>" for fr in frames)
+    return f'<div class="ds f" style="--d:.5s" aria-hidden="true"><div class="win"><div class="strip" style="--n:{len(frames)}">{pre}</div></div></div>'
 
 def main_card(t, total, days, streak):
     plot_svg, months = plot(days)
-    motif_html = motif()
-    css = theme_vars(t) + """
+    import os
+    kind = os.environ.get("MOTIF", "asciiorb")
+    motif_html = motif_orb() if kind == "orb" else motif(kind)
+    css = MONO + theme_vars(t) + """
 .c { height: 100%; display: flex; flex-direction: column; padding-bottom: 20px; }
 .g { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); }
 .top b { grid-column: 1/7; font-weight: 500; } .top .r { grid-column: 7/10; } .top .z { grid-column: 10/13; text-align: right; }
@@ -151,16 +239,19 @@ svg.plot { display: block; width: 100%; height: 72px; overflow: visible; }
 .on { stroke: var(--fg); } .off { stroke: var(--fa); }
 @keyframes grow { to { transform: none; } }
 .tl { position: relative; height: 20px; margin-top: 8px; } .tl span { position: absolute; top: 0; }
-.ds { grid-column: 1/6; padding-top: 64px; display: flex; flex-direction: column; gap: 22px; font-size: 11px; line-height: 14px; }
-.sw { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-.sw i { display: block; height: 18px; border-radius: 3px; background: var(--fg); }
-.sw span { padding-top: 4px; }
-.sp { display: flex; align-items: flex-end; gap: 10px; }
-.sp div { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.sp b { display: block; border-radius: 2px; background: var(--fg); opacity: .9; }
-.ty { display: flex; align-items: baseline; gap: 14px; letter-spacing: -.02em; }
-.lb { display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
-@container (max-width: 699px) { .ds { grid-column: 1/5; padding-right: 28px; } .sw { grid-template-columns: repeat(5, 1fr); } .sw .h { display: none; } .ty .h { display: none; } .sp .h { display: none; } }
+.ds { grid-column: 1/6; padding-top: 48px; }
+.win { height: calc(26 * 9px); overflow: hidden; }
+.strip { animation: spin 6s steps(var(--n)) infinite; }
+.strip pre { font-family: M, ui-monospace, Menlo, monospace; font-size: 9px; line-height: 9px; height: calc(26 * 9px); letter-spacing: 0; color: var(--fg); white-space: pre; margin: 0; }
+@keyframes spin { to { transform: translateY(calc(-26 * 9px * var(--n))); } }
+@media (prefers-reduced-motion: reduce) { .strip { animation: none !important; } }
+.orb .win { width: 180px; height: 180px; } .orb .strip svg { display: block; width: 180px; height: 180px; }
+.orb .dk { fill: var(--fa); } .orb .lt { fill: var(--fg); }
+.orb .strip { animation-duration: 4s; } .orb { padding-top: 60px; }
+@keyframes spinorb { to { transform: translateY(calc(-180px * var(--n))); } } .orb .strip { animation-name: spinorb; }
+@container (max-width: 699px) { .orb .win, .orb .strip svg { width: 140px; height: 140px; } @keyframes spinorb { to { transform: translateY(calc(-140px * var(--n))); } } }
+
+@container (max-width: 699px) { .ds { grid-column: 1/5; padding-right: 20px; overflow: hidden; } .strip pre { font-size: 7px; } }
 @container (max-width: 699px) { .rt { grid-column: 5/13; } .sent p { font-size: 23px; } }
 @container (max-width: 559px) { .ds { display: none; } .rt { grid-column: 1/13; } .sent p { font-size: 21px; padding-top: 40px; } .fx { margin-top: 22px; gap: 12px; }
   .top .r { grid-column: 7/13; text-align: right; } .top .z { display: none; } .tl span:nth-child(even) { display: none; } .nx { display: none; } }
