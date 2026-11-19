@@ -119,14 +119,29 @@ def plot(days):
             months.append(f'<span class="m" style="left:{i / len(days) * 100:.2f}%">{date.strftime("%b")}</span>')
     return svg, "".join(months)
 
+def motif():
+    """Abstract design-system specimen: neutral ramp, spacing scale, type scale."""
+    steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
+    ops = [.04, .08, .14, .24, .36, .5, .64, .78, .9, 1]
+    sw = "".join(f'<div class="{"h" if i % 2 else ""}"><i style="opacity:{o}"></i><span class="m">{n}</span></div>'
+                 for i, (n, o) in enumerate(zip(steps, ops)))
+    sp = "".join(f'<div class="{"h" if v > 24 else ""}"><b style="width:{v}px;height:{v}px"></b><span class="m">{v}</span></div>' for v in (4, 8, 12, 16, 24, 32))
+    ty = "".join(f'<span class="{"h" if i > 3 else ""}" style="font-size:{z}px;line-height:1">Aa</span>' for i, z in enumerate((11, 14, 18, 24, 32)))
+    return (f'<div class="ds">'
+            f'<div class="f" style="--d:.55s"><div class="lb m" style="margin-bottom:8px"><span>color.neutral</span><span>01</span></div><div class="sw">{sw}</div></div>'
+            f'<div class="f" style="--d:.65s"><div class="lb m" style="margin-bottom:8px"><span>space</span><span>02</span></div><div class="sp">{sp}</div></div>'
+            f'<div class="f" style="--d:.75s"><div class="lb m" style="margin-bottom:8px"><span>type</span><span>03</span></div><div class="ty">{ty}</div></div>'
+            f'</div>')
+
 def main_card(t, total, days, streak):
     plot_svg, months = plot(days)
+    motif_html = motif()
     css = theme_vars(t) + """
 .c { height: 100%; display: flex; flex-direction: column; padding-bottom: 20px; }
 .g { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); }
 .top b { grid-column: 1/7; font-weight: 500; } .top .r { grid-column: 7/10; } .top .z { grid-column: 10/13; text-align: right; }
-.sent p { grid-column: 7/13; font-size: 26px; line-height: 1.23; letter-spacing: -.022em; padding-top: 56px; text-wrap: pretty; }
-.fx { grid-column: 7/13; margin-top: 28px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
+.rt { grid-column: 7/13; } .sent p { font-size: 26px; line-height: 1.23; letter-spacing: -.022em; padding-top: 56px; text-wrap: pretty; }
+.fx { margin-top: 28px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
 .fc { display: flex; flex-direction: column; min-width: 0; } .fc .v { overflow-wrap: anywhere; }
 .gr { margin-top: auto; padding-top: 24px; }
 .meta { display: flex; justify-content: space-between; margin-bottom: 14px; }
@@ -136,15 +151,25 @@ svg.plot { display: block; width: 100%; height: 72px; overflow: visible; }
 .on { stroke: var(--fg); } .off { stroke: var(--fa); }
 @keyframes grow { to { transform: none; } }
 .tl { position: relative; height: 20px; margin-top: 8px; } .tl span { position: absolute; top: 0; }
-@container (max-width: 699px) { .sent p, .fx { grid-column: 5/13; } .sent p { font-size: 23px; } }
-@container (max-width: 559px) { .sent p, .fx { grid-column: 1/13; } .sent p { font-size: 21px; padding-top: 40px; } .fx { margin-top: 22px; gap: 12px; }
+.ds { grid-column: 1/6; padding-top: 64px; display: flex; flex-direction: column; gap: 22px; font-size: 11px; line-height: 14px; }
+.sw { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.sw i { display: block; height: 18px; border-radius: 3px; background: var(--fg); }
+.sw span { padding-top: 4px; }
+.sp { display: flex; align-items: flex-end; gap: 10px; }
+.sp div { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.sp b { display: block; border-radius: 2px; background: var(--fg); opacity: .9; }
+.ty { display: flex; align-items: baseline; gap: 14px; letter-spacing: -.02em; }
+.lb { display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+@container (max-width: 699px) { .ds { grid-column: 1/5; padding-right: 28px; } .sw { grid-template-columns: repeat(5, 1fr); } .sw .h { display: none; } .ty .h { display: none; } .sp .h { display: none; } }
+@container (max-width: 699px) { .rt { grid-column: 5/13; } .sent p { font-size: 23px; } }
+@container (max-width: 559px) { .ds { display: none; } .rt { grid-column: 1/13; } .sent p { font-size: 21px; padding-top: 40px; } .fx { margin-top: 22px; gap: 12px; }
   .top .r { grid-column: 7/13; text-align: right; } .top .z { display: none; } .tl span:nth-child(even) { display: none; } .nx { display: none; } }
 """
     facts = "".join(f'<div class="fc"><span class="m">{html.escape(k)}</span><span class="v">{html.escape(v)}</span></div>' for k, v in FACTS)
     today = dt.date.today().strftime("%b %-d")
     body = f"""<div class="c">
 <div class="g top"><b class="f">{html.escape(NAME)}</b><span class="r m f" style="--d:.08s">{html.escape(ROLE)}</span><span class="z m f" style="--d:.16s">{html.escape(PLACE)}</span></div>
-<div class="g sent"><p class="f" style="--d:.3s">{html.escape(LEAD)} <span class="m">{html.escape(REST)}</span></p><div class="fx f" style="--d:.42s">{facts}</div></div>
+<div class="g sent">{motif_html}<div class="rt"><p class="f" style="--d:.3s">{html.escape(LEAD)} <span class="m">{html.escape(REST)}</span></p><div class="fx f" style="--d:.42s">{facts}</div></div></div>
 <div class="gr f" style="--d:.5s"><div class="meta"><span>{total:,} <span class="m">contributions<span class="nx"> in the last year</span></span></span><span class="m">Updated {today}</span></div>{plot_svg}<div class="tl">{months}</div></div>
 </div>"""
     label = f"{NAME}. {LEAD} {REST} " + " ".join(f"{k}: {v}." for k, v in FACTS) + f" {total:,} contributions in the last year."
